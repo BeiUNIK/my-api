@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YunikoBot - AI Content Studio</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        .hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 100px 20px;
+            text-align: center;
+        }
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 20px;
+        }
+        .hero p {
+            font-size: 1.3rem;
+            max-width: 600px;
+            margin: 0 auto 30px;
+        }
+        .btn {
+            display: inline-block;
+            background: white;
+            color: #667eea;
+            padding: 15px 40px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.2s;
+        }
+        .btn:hover {
+            transform: scale(1.05);
+        }
+        .btn-outline {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 50px;
+            margin-top: 50px;
+        }
+        .stat h3 {
+            font-size: 2.5rem;
+        }
+        .features {
+            padding: 80px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .features h2 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 50px;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+        .feature-card {
+            padding: 30px;
+            border-radius: 15px;
+            background: #f8f9fa;
+        }
+        .feature-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        .pricing {
+            background: #f8f9fa;
+            padding: 80px 20px;
+        }
+        .pricing h2 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 50px;
+        }
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .pricing-card {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            border: 2px solid #e0e0e0;
+        }
+        .pricing-card.featured {
+            border-color: #667eea;
+            transform: scale(1.05);
+        }
+        .pricing-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+        .price {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .price span {
+            font-size: 1rem;
+            color: #666;
+        }
+        .pricing-card ul {
+            list-style: none;
+            margin: 30px 0;
+            text-align: left;
+        }
+        .pricing-card li {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .pricing-card li:before {
+            content: "✓ ";
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .badge {
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        .cta {
+            background: #667eea;
+            color: white;
+            padding: 80px 20px;
+            text-align: center;
+        }
+        .cta h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+        .cta .btn {
+            background: white;
+            color: #667eea;
+            margin-top: 20px;
+        }
+        footer {
+            background: #333;
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+        .modal-content h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .modal-content input {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+        }
+        .modal-content .btn {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 2rem;
+            color: white;
+            cursor: pointer;
+        }
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            .stats {
+                flex-direction: column;
+                gap: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1>Create Content <span style="color: #FFD700;">10x Faster</span></h1>
+        <p>AI-powered content creation for creators, marketers, and businesses. Generate blog posts, social media, and emails in minutes.</p>
+        <button class="btn" onclick="openModal('starter')">Start Free Trial</button>
+        <a href="#features" class="btn btn-outline">See How It Works</a>
+        
+        <div class="stats">
+            <div class="stat">
+                <h3>10K+</h3>
+                <p>Active Users</p>
+            </div>
+            <div class="stat">
+                <h3>1M+</h3>
+                <p>Articles Created</p>
+            </div>
+            <div class="stat">
+                <h3>4.9/5</h3>
+                <p>User Rating</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <h2>Everything You Need to Create Content at Scale</h2>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <h3>📝 Blog Post Generator</h3>
+                <p>Create SEO-optimized blog posts of 2,500+ words in minutes. Includes research, outline, and full article.</p>
+            </div>
+            <div class="feature-card">
+                <h3>⚡ Social Media Posts</h3>
+                <p>Generate engaging posts for Twitter, LinkedIn, and Instagram. Includes hashtags and optimal formatting.</p>
+            </div>
+            <div class="feature-card">
+                <h3>📧 Email Sequences</h3>
+                <p>Write high-converting email sequences, newsletters, and cold outreach that gets responses.</p>
+            </div>
+            <div class="feature-card">
+                <h3>📊 SEO Optimization</h3>
+                <p>Built-in SEO tools ensure your content ranks. Keyword suggestions, meta descriptions, and readability analysis.</p>
+            </div>
+            <div class="feature-card">
+                <h3>🎯 Brand Voice Training</h3>
+                <p>Train the AI on your existing content to match your unique brand voice, tone, and style perfectly.</p>
+            </div>
+            <div class="feature-card">
+                <h3>✅ One-Click Publishing</h3>
+                <p>Publish directly to WordPress, Webflow, or your CMS. Schedule posts and manage your content calendar.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="pricing" id="pricing">
+        <h2>Simple, Transparent Pricing</h2>
+        <div class="pricing-grid">
+            <div class="pricing-card">
+                <h3>Starter</h3>
+                <div class="price">$27<span>/mo</span></div>
+                <p>Perfect for solo creators getting started</p>
+                <ul>
+                    <li>10,000 AI words/month</li>
+                    <li>5 blog posts</li>
+                    <li>Social media posts</li>
+                    <li>Email support</li>
+                    <li>Basic SEO tools</li>
+                </ul>
+                <button class="btn" style="background: #667eea; color: white;" onclick="openModal('starter')">Start Free Trial</button>
+            </div>
+            
+            <div class="pricing-card featured">
+                <span class="badge">Most Popular</span>
+                <h3>Professional</h3>
+                <div class="price">$97<span>/mo</span></div>
+                <p>For serious content creators and teams</p>
+                <ul>
+                    <li>Unlimited AI words</li>
+                    <li>Unlimited blog posts</li>
+                    <li>All social platforms</li>
+                    <li>Priority support</li>
+                    <li>Advanced SEO tools</li>
+                    <li>Brand voice training</li>
+                    <li>API access</li>
+                </ul>
+                <button class="btn" style="background: #667eea; color: white;" onclick="openModal('pro')">Start Free Trial</button>
+            </div>
+            
+            <div class="pricing-card">
+                <h3>Annual</h3>
+                <div class="price">$970<span>/yr</span></div>
+                <p>Save 2 months with annual billing</p>
+                <ul>
+                    <li>Everything in Pro</li>
+                    <li>2 months free</li>
+                    <li>Dedicated account manager</li>
+                    <li>Custom AI training</li>
+                    <li>Team collaboration</li>
+                    <li>White-label options</li>
+                </ul>
+                <button class="btn" style="background: #667eea; color: white;" onclick="openModal('annual')">Start Free Trial</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta">
+        <h2>Ready to 10x Your Content Output?</h2>
+        <p>Join 10,000+ creators already using YunikoBot</p>
+        <button class="btn" onclick="openModal('pro')">Start Your Free Trial</button>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy; 2024 YunikoBot. All rights reserved.</p>
+    </footer>
+
+    <!-- Email Modal -->
+    <div class="modal" id="emailModal">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <div class="modal-content">
+            <h3>Start Your Free Trial</h3>
+            <p id="planText">Enter your email to get started</p>
+            <input type="email" id="emailInput" placeholder="your@email.com" required>
+            <button class="btn" style="background: #667eea; color: white;" onclick="submitEmail()">Continue to Payment</button>
+            <p style="font-size: 0.8rem; color: #666; margin-top: 15px;">No credit card required for trial</p>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div class="modal" id="successModal">
+        <div class="modal-content">
+            <h3>🎉 You're In!</h3>
+            <p>Thanks for signing up! Check your email for payment details.</p>
+            <button class="btn" style="background: #667eea; color: white;" onclick="closeSuccessModal()">Got it!</button>
+        </div>
+    </div>
+
+    <script>
+        let selectedPlan = '';
+
+        function openModal(plan) {
+            selectedPlan = plan;
+            const planNames = {
+                'starter': 'Starter Plan ($27/mo)',
+                'pro': 'Professional Plan ($97/mo)',
+                'annual': 'Annual Plan ($970/yr)'
+            };
+            document.getElementById('planText').textContent = 'You selected: ' + planNames[plan];
+            document.getElementById('emailModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('emailModal').classList.remove('active');
+        }
+
+        function closeSuccessModal() {
+            document.getElementById('successModal').classList.remove('active');
+        }
+
+        async function submitEmail() {
+            const email = document.getElementById('emailInput').value;
+            if (!email || !email.includes('@')) {
+                alert('Please enter a valid email');
+                return;
+            }
+
+            // Send to your API
+            try {
+                await fetch('https://my-api-iota-one.vercel.app/api/v1/leads/capture', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: email,
+                        source: 'website',
+                        lead_magnet: selectedPlan
+                    })
+                });
+            } catch (e) {
+                console.log('API call attempted');
+            }
+
+            // Close email modal, show success
+            closeModal();
+            document.getElementById('successModal').classList.add('active');
+
+            // Clear input
+            document.getElementById('emailInput').value = '';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('emailModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>
