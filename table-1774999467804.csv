@@ -1,0 +1,9 @@
+﻿Name,Value
+`TELEGRAM_BOT_TOKEN`,`8702462545:AAFn87DUV2vHCtpjXyQxJSYdwKqkh4fL3Zk`
+`TELEGRAM_CHAT_ID`,`1830418033`
+`ANTHROPIC_API_KEY`,(your Claude key)
+`OPENAI_API_KEY`,(your OpenAI key)
+`SUPABASE_URL`,(your Supabase URL)
+`SUPABASE_KEY`,(your Supabase key)
+`STRIPE_SECRET_KEY`,(your Stripe key)
+`SENDGRID_API_KEY`,(your SendGrid key)

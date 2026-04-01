@@ -1,0 +1,280 @@
+{
+  "name": "AI-Powered Customer Support",
+  "description": "Automatically handle customer support inquiries with AI, escalate when needed",
+  "version": "1.0",
+  "trigger": {
+    "type": "webhook",
+    "name": "New Support Message",
+    "config": {
+      "url": "{{webhook_url}}/support/incoming",
+      "sources": ["intercom", "email", "chat"],
+      "data_mapping": {
+        "message": "{{payload.message}}",
+        "customer_email": "{{payload.email}}",
+        "conversation_id": "{{payload.conversation_id}}",
+        "source": "{{payload.source}}"
+      }
+    }
+  },
+  "steps": [
+    {
+      "id": 1,
+      "name": "Classify Intent",
+      "type": "anthropic",
+      "model": "claude-3-5-haiku-20241022",
+      "max_tokens": 500,
+      "system_prompt": "You are a support intent classifier. Categorize the customer message and determine priority.",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Classify this support message: '{{message}}'. Return JSON with: intent (billing/technical/feature_request/complaint/question), priority (low/medium/high/urgent), sentiment (positive/neutral/negative), can_auto_resolve (true/false)"
+        }
+      ],
+      "store_result": "classification"
+    },
+    {
+      "id": 2,
+      "name": "Route by Intent",
+      "type": "router",
+      "routes": [
+        {
+          "name": "Billing Questions",
+          "condition": "{{classification.intent}} = 'billing'",
+          "steps": [
+            {
+              "name": "Get Customer Billing Info",
+              "type": "supabase",
+              "operation": "select",
+              "table": "customers",
+              "filter": "email = {{customer_email}}",
+              "store_result": "customer"
+            },
+            {
+              "name": "Generate Billing Response",
+              "type": "anthropic",
+              "model": "claude-3-5-haiku-20241022",
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "Customer billing question: '{{message}}'. Customer plan: {{customer.plan}}. Payment status: {{customer.payment_status}}. Generate helpful response with specific next steps."
+                }
+              ],
+              "store_result": "response"
+            }
+          ]
+        },
+        {
+          "name": "Technical Issues",
+          "condition": "{{classification.intent}} = 'technical'",
+          "steps": [
+            {
+              "name": "Check Knowledge Base",
+              "type": "supabase",
+              "operation": "select",
+              "table": "knowledge_base",
+              "filter": "content ilike '%{{extractKeywords(message)}}%'",
+              "limit": 3
+            },
+            {
+              "name": "Generate Technical Response",
+              "type": "anthropic",
+              "model": "claude-3-5-haiku-20241022",
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "Technical issue: '{{message}}'. Relevant docs: {{knowledge_base}}. Generate step-by-step troubleshooting response."
+                }
+              ],
+              "store_result": "response"
+            }
+          ]
+        },
+        {
+          "name": "Feature Requests",
+          "condition": "{{classification.intent}} = 'feature_request'",
+          "steps": [
+            {
+              "name": "Log Feature Request",
+              "type": "supabase",
+              "operation": "insert",
+              "table": "feature_requests",
+              "data": {
+                "customer_email": "{{customer_email}}",
+                "request": "{{message}}",
+                "status": "under_review",
+                "votes": 1,
+                "created_at": "{{now}}"
+              }
+            },
+            {
+              "name": "Generate Feature Response",
+              "type": "openai",
+              "model": "gpt-4o-mini",
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "Acknowledge this feature request: '{{message}}'. Thank them and mention it will be reviewed by the product team."
+                }
+              ],
+              "store_result": "response"
+            }
+          ]
+        },
+        {
+          "name": "Complaints",
+          "condition": "{{classification.intent}} = 'complaint'",
+          "steps": [
+            {
+              "name": "Flag for Human Review",
+              "type": "slack",
+              "webhook": "{{SLACK_WEBHOOK_URL}}",
+              "message": "🚨 COMPLAINT ALERT\nCustomer: {{customer_email}}\nMessage: {{message}}\nSentiment: {{classification.sentiment}}\nAction: Human intervention required"
+            },
+            {
+              "name": "Send Empathy Response",
+              "type": "anthropic",
+              "model": "claude-3-5-haiku-20241022",
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "Customer complaint: '{{message}}'. Generate empathetic response acknowledging their frustration and promising swift resolution from support team."
+                }
+              ],
+              "store_result": "response"
+            },
+            {
+              "name": "Create Support Ticket",
+              "type": "supabase",
+              "operation": "insert",
+              "table": "support_tickets",
+              "data": {
+                "customer_email": "{{customer_email}}",
+                "message": "{{message}}",
+                "priority": "high",
+                "status": "open",
+                "requires_human": true,
+                "created_at": "{{now}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "General Questions",
+          "condition": "{{classification.intent}} = 'question'",
+          "steps": [
+            {
+              "name": "Generate Answer",
+              "type": "anthropic",
+              "model": "claude-3-5-haiku-20241022",
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "Customer question: '{{message}}'. Provide clear, helpful answer. If unsure, suggest contacting support."
+                }
+              ],
+              "store_result": "response"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Send AI Response",
+      "type": "filter",
+      "condition": "{{classification.can_auto_resolve}} = true AND {{response}} exists",
+      "steps": [
+        {
+          "name": "Send Response",
+          "type": "intercom",
+          "operation": "reply_to_conversation",
+          "conversation_id": "{{conversation_id}}",
+          "message": "{{response}}",
+          "attributes": {
+            "ai_generated": true,
+            "confidence": "{{classification.confidence}}"
+          }
+        },
+        {
+          "name": "Log AI Response",
+          "type": "supabase",
+          "operation": "insert",
+          "table": "support_interactions",
+          "data": {
+            "customer_email": "{{customer_email}}",
+            "incoming_message": "{{message}}",
+            "ai_response": "{{response}}",
+            "intent": "{{classification.intent}}",
+            "resolved": true,
+            "created_at": "{{now}}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Escalate to Human",
+      "type": "filter",
+      "condition": "{{classification.can_auto_resolve}} = false OR {{classification.priority}} = 'urgent'",
+      "steps": [
+        {
+          "name": "Create Human Ticket",
+          "type": "supabase",
+          "operation": "insert",
+          "table": "support_tickets",
+          "data": {
+            "customer_email": "{{customer_email}}",
+            "message": "{{message}}",
+            "intent": "{{classification.intent}}",
+            "priority": "{{classification.priority}}",
+            "status": "open",
+            "requires_human": true,
+            "ai_classification": "{{classification}}",
+            "created_at": "{{now}}"
+          }
+        },
+        {
+          "name": "Notify Support Team",
+          "type": "slack",
+          "webhook": "{{SLACK_WEBHOOK_URL}}",
+          "message": "🎫 New Support Ticket\nCustomer: {{customer_email}}\nIntent: {{classification.intent}}\nPriority: {{classification.priority}}\nMessage: {{truncate(message, 100)}}"
+        },
+        {
+          "name": "Send Holding Response",
+          "type": "intercom",
+          "operation": "reply_to_conversation",
+          "conversation_id": "{{conversation_id}}",
+          "message": "Thanks for reaching out! I've escalated this to our support team. They'll get back to you within 2-4 hours. Reference: #{{ticket_id}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Daily Support Report",
+      "type": "schedule",
+      "frequency": "daily",
+      "time": "18:00",
+      "steps": [
+        {
+          "name": "Get Stats",
+          "type": "supabase",
+          "operation": "raw_query",
+          "query": "SELECT COUNT(*) as total, SUM(CASE WHEN resolved = true THEN 1 ELSE 0 END) as auto_resolved FROM support_interactions WHERE DATE(created_at) = CURRENT_DATE"
+        },
+        {
+          "name": "Send Report",
+          "type": "slack",
+          "webhook": "{{SLACK_WEBHOOK_URL}}",
+          "message": "📊 Daily Support Report\nTotal Interactions: {{stats.total}}\nAI Resolved: {{stats.auto_resolved}} ({{divide(stats.auto_resolved, stats.total)}}%)\nHuman Required: {{subtract(stats.total, stats.auto_resolved)}}"
+        }
+      ]
+    }
+  ],
+  "error_handling": {
+    "retry_count": 3,
+    "on_failure": {
+      "action": "slack_notification",
+      "message": "⚠️ Support automation failed for message from {{customer_email}}"
+    }
+  }
+}

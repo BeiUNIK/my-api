@@ -1,0 +1,180 @@
+{
+  "name": "Payment Processing & Customer Onboarding",
+  "description": "Handle Stripe payments, grant access, trigger onboarding",
+  "version": "1.0",
+  "trigger": {
+    "type": "webhook",
+    "name": "Stripe Webhook",
+    "config": {
+      "url": "{{stripe_webhook_url}}",
+      "events": ["checkout.session.completed", "invoice.payment_succeeded", "customer.subscription.created"],
+      "secret": "{{STRIPE_WEBHOOK_SECRET}}"
+    }
+  },
+  "steps": [
+    {
+      "id": 1,
+      "name": "Verify Webhook Signature",
+      "type": "stripe",
+      "operation": "verify_webhook",
+      "secret": "{{STRIPE_WEBHOOK_SECRET}}"
+    },
+    {
+      "id": 2,
+      "name": "Extract Payment Data",
+      "type": "transformer",
+      "mapping": {
+        "customer_email": "{{payload.data.object.customer_email}}",
+        "customer_id": "{{payload.data.object.customer}}",
+        "subscription_id": "{{payload.data.object.subscription}}",
+        "amount_paid": "{{payload.data.object.amount_total}}",
+        "currency": "{{payload.data.object.currency}}",
+        "plan_id": "{{payload.data.object.line_items.data[0].price.id}}",
+        "payment_status": "{{payload.data.object.payment_status}}"
+      }
+    },
+    {
+      "id": 3,
+      "name": "Filter Successful Payments",
+      "type": "filter",
+      "condition": "{{payment_status}} = 'paid' OR {{payment_status}} = 'succeeded'"
+    },
+    {
+      "id": 4,
+      "name": "Determine Plan Type",
+      "type": "router",
+      "routes": [
+        {
+          "name": "Starter Plan",
+          "condition": "{{plan_id}} = {{STRIPE_PRICE_STARTER}}",
+          "plan": "starter",
+          "features": ["basic_access", "email_support"]
+        },
+        {
+          "name": "Pro Plan",
+          "condition": "{{plan_id}} = {{STRIPE_PRICE_PRO}}",
+          "plan": "pro",
+          "features": ["full_access", "priority_support", "advanced_features"]
+        },
+        {
+          "name": "Annual Plan",
+          "condition": "{{plan_id}} = {{STRIPE_PRICE_ANNUAL}}",
+          "plan": "annual",
+          "features": ["full_access", "priority_support", "advanced_features", "annual_bonus"]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Create Customer Record",
+      "type": "supabase",
+      "operation": "upsert",
+      "table": "customers",
+      "data": {
+        "stripe_customer_id": "{{customer_id}}",
+        "stripe_subscription_id": "{{subscription_id}}",
+        "email": "{{customer_email}}",
+        "plan": "{{plan}}",
+        "status": "active",
+        "features": "{{features}}",
+        "created_at": "{{now}}",
+        "updated_at": "{{now}}"
+      }
+    },
+    {
+      "id": 6,
+      "name": "Grant MemberStack Access",
+      "type": "memberstack",
+      "operation": "create_member",
+      "data": {
+        "email": "{{customer_email}}",
+        "plan": "{{plan}}",
+        "metadata": {
+          "stripe_customer_id": "{{customer_id}}",
+          "subscription_id": "{{subscription_id}}"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "name": "Send Payment Confirmation",
+      "type": "sendgrid",
+      "template_id": "d-payment_confirmation_template",
+      "to": "{{customer_email}}",
+      "data": {
+        "plan_name": "{{plan}}",
+        "login_link": "https://app.yourdomain.com/login",
+        "support_email": "support@yourdomain.com"
+      }
+    },
+    {
+      "id": 8,
+      "name": "Trigger Onboarding Sequence",
+      "type": "http",
+      "method": "POST",
+      "url": "{{your_api_url}}/api/v1/onboarding/{{customer_email}}/start",
+      "headers": {
+        "Authorization": "Bearer {{API_SECRET_KEY}}"
+      }
+    },
+    {
+      "id": 9,
+      "name": "Update HubSpot to Customer",
+      "type": "hubspot",
+      "operation": "update_contact",
+      "filter": "email = {{customer_email}}",
+      "data": {
+        "lifecyclestage": "customer",
+        "hs_lead_status": "OPEN",
+        "plan": "{{plan}}",
+        "mrr": "{{divide(amount_paid, 100)}}"
+      }
+    },
+    {
+      "id": 10,
+      "name": "Send Revenue Alert to Slack",
+      "type": "slack",
+      "webhook": "{{SLACK_WEBHOOK_URL}}",
+      "message": "💰 NEW PAYMENT!\nAmount: ${{divide(amount_paid, 100)}}\nPlan: {{plan}}\nCustomer: {{customer_email}}\nMRR Updated!"
+    },
+    {
+      "id": 11,
+      "name": "Send Telegram Payment Alert",
+      "type": "http",
+      "method": "POST",
+      "url": "https://api.telegram.org/bot8702462545:AAFn87DUV2vHCtpjXyQxJSYdwKqkh4fL3Zk/sendMessage",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "chat_id": "1830418033",
+        "text": "💰 <b>NEW PAYMENT RECEIVED!</b>\n\nAmount: <b>${{divide(amount_paid, 100)}}</b>\nPlan: {{plan}}\nCustomer: {{customer_email}}\nTime: {{now}}\n\n🎉 Keep it rolling!",
+        "parse_mode": "HTML"
+      }
+    },
+    {
+      "id": 12,
+      "name": "Record Revenue Analytics",
+      "type": "supabase",
+      "operation": "insert",
+      "table": "revenue",
+      "data": {
+        "event_type": "payment_received",
+        "customer_email": "{{customer_email}}",
+        "amount": "{{divide(amount_paid, 100)}}",
+        "plan": "{{plan}}",
+        "currency": "{{currency}}",
+        "stripe_event_id": "{{payload.id}}",
+        "timestamp": "{{now}}"
+      }
+    }
+  ],
+  "error_handling": {
+    "retry_count": 5,
+    "retry_interval": 120,
+    "on_failure": {
+      "action": "slack_notification",
+      "message": "🚨 CRITICAL: Payment processing failed for {{customer_email}}. Manual intervention required!"
+    }
+  }
+}

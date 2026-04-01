@@ -1,0 +1,77 @@
+# ==========================================
+# $1000/WEEK PASSIVE INCOME SYSTEM
+# Environment Configuration with TELEGRAM
+# ==========================================
+
+# -----------------------------------------
+# TELEGRAM NOTIFICATIONS (Your Credentials)
+# -----------------------------------------
+TELEGRAM_BOT_TOKEN=8702462545:AAFn87DUV2vHCtpjXyQxJSYdwKqkh4fL3Zk
+TELEGRAM_CHAT_ID=1830418033
+TELEGRAM_ENABLED=true
+
+# -----------------------------------------
+# AI API KEYS (Required)
+# -----------------------------------------
+ANTHROPIC_API_KEY=sk-ant-your_claude_api_key_here
+OPENAI_API_KEY=sk-your_openai_api_key_here
+
+# -----------------------------------------
+# DATABASE (Supabase - Free Tier)
+# -----------------------------------------
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=eyJyour_supabase_anon_key_here
+SUPABASE_SERVICE_KEY=eyJyour_supabase_service_key_here
+
+# -----------------------------------------
+# PAYMENTS (Stripe)
+# -----------------------------------------
+STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
+STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
+
+# Price IDs (create these in Stripe Dashboard)
+STRIPE_PRICE_STARTER=price_your_starter_price_id
+STRIPE_PRICE_PRO=price_your_pro_price_id
+STRIPE_PRICE_ANNUAL=price_your_annual_price_id
+
+# -----------------------------------------
+# EMAIL (SendGrid - Free Tier: 100 emails/day)
+# -----------------------------------------
+SENDGRID_API_KEY=SG.your_sendgrid_api_key
+FROM_EMAIL=noreply@yourdomain.com
+FROM_NAME="Your Business Name"
+
+# -----------------------------------------
+# WEBSITE (Webflow or custom domain)
+# -----------------------------------------
+SITE_URL=https://your-site.webflow.io
+DOMAIN=yourdomain.com
+
+# -----------------------------------------
+# BUSINESS CONFIGURATION
+# -----------------------------------------
+BUSINESS_NAME="AI Content Studio"
+NICHE="content-creation"
+CURRENCY=usd
+TIMEZONE=America/New_York
+
+# Pricing (match your Stripe prices)
+PRICE_STARTER=27
+PRICE_PRO=97
+PRICE_ANNUAL=970
+
+# -----------------------------------------
+# ALERT THRESHOLDS
+# -----------------------------------------
+ALERT_REVENUE_DROP_THRESHOLD=50
+ALERT_ERROR_RATE_THRESHOLD=5
+ALERT_ZERO_REVENUE_HOURS=2
+
+# -----------------------------------------
+# ADVANCED SETTINGS
+# -----------------------------------------
+DEBUG=false
+LOG_LEVEL=INFO
+MAX_RETRIES=5
+RETRY_BACKOFF_BASE=2

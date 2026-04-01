@@ -1,0 +1,232 @@
+{
+  "name": "Automated Customer Onboarding",
+  "description": "7-step onboarding sequence for new customers",
+  "version": "1.0",
+  "trigger": {
+    "type": "webhook",
+    "name": "Start Onboarding",
+    "config": {
+      "url": "{{webhook_url}}/onboarding/start",
+      "method": "POST",
+      "data_mapping": {
+        "customer_email": "{{payload.email}}",
+        "plan": "{{payload.plan}}",
+        "first_name": "{{payload.first_name}}"
+      }
+    }
+  },
+  "steps": [
+    {
+      "id": 1,
+      "name": "Create Onboarding Record",
+      "type": "supabase",
+      "operation": "insert",
+      "table": "onboarding",
+      "data": {
+        "customer_email": "{{customer_email}}",
+        "plan": "{{plan}}",
+        "status": "in_progress",
+        "step": 1,
+        "started_at": "{{now}}",
+        "completed_steps": []
+      }
+    },
+    {
+      "id": 2,
+      "name": "Send Welcome & Login Instructions",
+      "type": "sendgrid",
+      "template_id": "d-onboarding-welcome",
+      "to": "{{customer_email}}",
+      "data": {
+        "first_name": "{{first_name}}",
+        "plan": "{{plan}}",
+        "login_url": "https://app.yourdomain.com/login",
+        "getting_started_url": "https://yourdomain.com/getting-started",
+        "support_url": "https://yourdomain.com/support"
+      }
+    },
+    {
+      "id": 3,
+      "name": "Schedule Day 3: Quick Win Email",
+      "type": "schedule",
+      "execute_at": "{{addHours(now, 72)}}",
+      "steps": [
+        {
+          "name": "Send Quick Win Tutorial",
+          "type": "sendgrid",
+          "template_id": "d-onboarding-quick-win",
+          "to": "{{customer_email}}",
+          "data": {
+            "first_name": "{{first_name}}",
+            "tutorial_link": "https://yourdomain.com/tutorials/quick-start"
+          }
+        },
+        {
+          "name": "Update Onboarding Step",
+          "type": "supabase",
+          "operation": "update",
+          "table": "onboarding",
+          "filter": "customer_email = {{customer_email}}",
+          "data": {
+            "step": 2,
+            "completed_steps": ["welcome", "quick_win"]
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Schedule Day 7: Advanced Features",
+      "type": "schedule",
+      "execute_at": "{{addHours(now, 168)}}",
+      "steps": [
+        {
+          "name": "Send Advanced Tutorial",
+          "type": "sendgrid",
+          "template_id": "d-onboarding-advanced",
+          "to": "{{customer_email}}",
+          "data": {
+            "first_name": "{{first_name}}",
+            "advanced_features_link": "https://yourdomain.com/tutorials/advanced"
+          }
+        },
+        {
+          "name": "Check Engagement",
+          "type": "supabase",
+          "operation": "select",
+          "table": "user_activity",
+          "filter": "email = {{customer_email}} AND last_login > {{addDays(now, -7)}}"
+        },
+        {
+          "name": "Low Engagement Branch",
+          "type": "filter",
+          "condition": "{{user_activity.length}} = 0",
+          "steps": [
+            {
+              "name": "Send Re-engagement Email",
+              "type": "sendgrid",
+              "template_id": "d-reengagement",
+              "to": "{{customer_email}}",
+              "data": {
+                "first_name": "{{first_name}}",
+                "offer": "Free 15-min setup call"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Schedule Day 14: Check-in & Testimonial Request",
+      "type": "schedule",
+      "execute_at": "{{addHours(now, 336)}}",
+      "steps": [
+        {
+          "name": "Send Check-in Email",
+          "type": "sendgrid",
+          "template_id": "d-onboarding-checkin",
+          "to": "{{customer_email}}",
+          "data": {
+            "first_name": "{{first_name}}"
+          }
+        },
+        {
+          "name": "Request Testimonial (if engaged)",
+          "type": "filter",
+          "condition": "{{user_activity.login_count}} > 3",
+          "steps": [
+            {
+              "name": "Send Testimonial Request",
+              "type": "sendgrid",
+              "template_id": "d-testimonial-request",
+              "to": "{{customer_email}}",
+              "data": {
+                "review_link": "https://yourdomain.com/review"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Schedule Day 30: Upgrade Pitch",
+      "type": "schedule",
+      "execute_at": "{{addHours(now, 720)}}",
+      "steps": [
+        {
+          "name": "Check Current Plan",
+          "type": "supabase",
+          "operation": "select",
+          "table": "customers",
+          "filter": "email = {{customer_email}}",
+          "store_result": "customer"
+        },
+        {
+          "name": "Filter Starter Plans",
+          "type": "filter",
+          "condition": "{{customer.plan}} = 'starter'",
+          "steps": [
+            {
+              "name": "Send Upgrade Offer",
+              "type": "sendgrid",
+              "template_id": "d-upgrade-offer",
+              "to": "{{customer_email}}",
+              "data": {
+                "first_name": "{{first_name}}",
+                "upgrade_link": "https://yourdomain.com/upgrade?email={{customer_email}}",
+                "discount_code": "UPGRADE30"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Schedule Day 60: Annual Plan Offer",
+      "type": "schedule",
+      "execute_at": "{{addHours(now, 1440)}}",
+      "steps": [
+        {
+          "name": "Send Annual Plan Offer",
+          "type": "sendgrid",
+          "template_id": "d-annual-offer",
+          "to": "{{customer_email}}",
+          "data": {
+            "first_name": "{{first_name}}",
+            "annual_link": "https://yourdomain.com/upgrade/annual",
+            "savings": "2 months free"
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Mark Onboarding Complete",
+      "type": "schedule",
+      "execute_at": "{{addHours(now, 1441)}}",
+      "steps": [
+        {
+          "name": "Update Status",
+          "type": "supabase",
+          "operation": "update",
+          "table": "onboarding",
+          "filter": "customer_email = {{customer_email}}",
+          "data": {
+            "status": "completed",
+            "completed_at": "{{now}}"
+          }
+        }
+      ]
+    }
+  ],
+  "error_handling": {
+    "retry_count": 3,
+    "on_failure": {
+      "action": "slack_notification",
+      "message": "⚠️ Onboarding failed for {{customer_email}}"
+    }
+  }
+}

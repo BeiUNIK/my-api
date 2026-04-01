@@ -1,0 +1,189 @@
+{
+  "name": "AI Content Generation & Publishing",
+  "description": "Automatically generate blog posts, social content, and emails using AI",
+  "version": "1.0",
+  "trigger": {
+    "type": "schedule",
+    "name": "Daily Content Generation",
+    "config": {
+      "frequency": "daily",
+      "time": "09:00",
+      "timezone": "UTC"
+    }
+  },
+  "steps": [
+    {
+      "id": 1,
+      "name": "Check Content Calendar",
+      "type": "supabase",
+      "operation": "select",
+      "table": "content_calendar",
+      "filter": "scheduled_date = {{today}} AND status = 'pending'",
+      "limit": 3
+    },
+    {
+      "id": 2,
+      "name": "Process Each Content Item",
+      "type": "iterator",
+      "source": "{{content_calendar}}",
+      "steps": [
+        {
+          "id": 2.1,
+          "name": "Generate Content with AI",
+          "type": "anthropic",
+          "model": "claude-3-5-sonnet-20241022",
+          "max_tokens": 4000,
+          "temperature": 0.7,
+          "system_prompt": "You are an expert content creator specializing in {{niche}}. Create engaging, SEO-optimized content that provides value to readers.",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Create a {{content_type}} about {{topic}}. Target audience: {{target_audience}}. Tone: {{tone}}. Length: {{word_count}} words. Include: {{requirements}}"
+            }
+          ],
+          "store_result": "generated_content"
+        },
+        {
+          "id": 2.2,
+          "name": "Quality Check",
+          "type": "openai",
+          "model": "gpt-4o-mini",
+          "max_tokens": 500,
+          "messages": [
+            {
+              "role": "user",
+              "content": "Review this content for quality, accuracy, and tone. Rate 1-10 and suggest improvements if needed: {{generated_content}}"
+            }
+          ],
+          "store_result": "quality_check"
+        },
+        {
+          "id": 2.3,
+          "name": "Filter Low Quality",
+          "type": "filter",
+          "condition": "{{quality_check.score}} >= 7"
+        },
+        {
+          "id": 2.4,
+          "name": "Generate SEO Metadata",
+          "type": "openai",
+          "model": "gpt-4o-mini",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Generate SEO title (60 chars), meta description (160 chars), and 5 keywords for: {{generated_content.title}}"
+            }
+          ],
+          "store_result": "seo_data"
+        },
+        {
+          "id": 2.5,
+          "name": "Publish to Blog",
+          "type": "webflow",
+          "operation": "create_item",
+          "collection": "blog_posts",
+          "data": {
+            "name": "{{generated_content.title}}",
+            "slug": "{{slugify(generated_content.title)}}",
+            "content": "{{generated_content.body}}",
+            "meta-title": "{{seo_data.title}}",
+            "meta-description": "{{seo_data.description}}",
+            "keywords": "{{seo_data.keywords}}",
+            "author": "AI Content Team",
+            "published-on": "{{now}}",
+            "status": "published"
+          },
+          "store_result": "published_post"
+        },
+        {
+          "id": 2.6,
+          "name": "Generate Social Media Posts",
+          "type": "anthropic",
+          "model": "claude-3-5-haiku-20241022",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Create 5 social media posts promoting this blog: {{generated_content.title}}. Include: 1 Twitter thread, 2 LinkedIn posts, 2 Instagram captions. Include relevant hashtags."
+            }
+          ],
+          "store_result": "social_posts"
+        },
+        {
+          "id": 2.7,
+          "name": "Schedule Social Posts",
+          "type": "buffer",
+          "posts": [
+            {
+              "platform": "twitter",
+              "content": "{{social_posts.twitter}}",
+              "scheduled_at": "{{addHours(now, 2)}}"
+            },
+            {
+              "platform": "linkedin",
+              "content": "{{social_posts.linkedin_1}}",
+              "scheduled_at": "{{addHours(now, 4)}}"
+            },
+            {
+              "platform": "linkedin",
+              "content": "{{social_posts.linkedin_2}}",
+              "scheduled_at": "{{addHours(now, 24)}}"
+            },
+            {
+              "platform": "instagram",
+              "content": "{{social_posts.instagram_1}}",
+              "scheduled_at": "{{addHours(now, 6)}}"
+            },
+            {
+              "platform": "instagram",
+              "content": "{{social_posts.instagram_2}}",
+              "scheduled_at": "{{addHours(now, 48)}}"
+            }
+          ]
+        },
+        {
+          "id": 2.8,
+          "name": "Update Content Calendar",
+          "type": "supabase",
+          "operation": "update",
+          "table": "content_calendar",
+          "filter": "id = {{content_item.id}}",
+          "data": {
+            "status": "published",
+            "published_url": "{{published_post.url}}",
+            "published_at": "{{now}}"
+          }
+        },
+        {
+          "id": 2.9,
+          "name": "Log Content Creation",
+          "type": "supabase",
+          "operation": "insert",
+          "table": "content_log",
+          "data": {
+            "content_type": "{{content_type}}",
+            "topic": "{{topic}}",
+            "word_count": "{{generated_content.word_count}}",
+            "quality_score": "{{quality_check.score}}",
+            "published_url": "{{published_post.url}}",
+            "created_at": "{{now}}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Send Daily Content Report",
+      "type": "slack",
+      "webhook": "{{SLACK_WEBHOOK_URL}}",
+      "message": "✅ Daily Content Complete!\nArticles Published: {{content_calendar.length}}\nSocial Posts Scheduled: {{multiply(content_calendar.length, 5)}}\nNext: {{tomorrow}}"
+    }
+  ],
+  "error_handling": {
+    "retry_count": 3,
+    "retry_interval": 300,
+    "on_failure": {
+      "action": "slack_notification",
+      "message": "⚠️ Content generation failed for {{today}}"
+    }
+  }
+}

@@ -1,0 +1,144 @@
+{
+  "name": "Lead Capture & Welcome Sequence",
+  "description": "Automatically capture leads from website, add to CRM, and trigger welcome email sequence",
+  "version": "1.0",
+  "trigger": {
+    "type": "webhook",
+    "name": "Webflow Form Submission",
+    "config": {
+      "url": "{{webhook_url}}",
+      "method": "POST",
+      "data_mapping": {
+        "email": "{{payload.email}}",
+        "first_name": "{{payload.first_name}}",
+        "last_name": "{{payload.last_name}}",
+        "source": "{{payload.source}}",
+        "lead_magnet": "{{payload.lead_magnet}}"
+      }
+    }
+  },
+  "steps": [
+    {
+      "id": 1,
+      "name": "Validate Email",
+      "type": "filter",
+      "condition": "{{email}} contains @ AND {{email}} contains ."
+    },
+    {
+      "id": 2,
+      "name": "Check if Existing Customer",
+      "type": "supabase",
+      "operation": "select",
+      "table": "customers",
+      "filter": "email = {{email}}",
+      "store_result": "existing_customer"
+    },
+    {
+      "id": 3,
+      "name": "Filter Existing",
+      "type": "filter",
+      "condition": "{{existing_customer.length}} = 0"
+    },
+    {
+      "id": 4,
+      "name": "Create Lead in Database",
+      "type": "supabase",
+      "operation": "insert",
+      "table": "leads",
+      "data": {
+        "email": "{{email}}",
+        "first_name": "{{first_name}}",
+        "last_name": "{{last_name}}",
+        "source": "{{source}}",
+        "lead_magnet": "{{lead_magnet}}",
+        "status": "new",
+        "created_at": "{{now}}",
+        "tags": ["{{source}}", "{{lead_magnet}}"]
+      }
+    },
+    {
+      "id": 5,
+      "name": "Add to HubSpot CRM",
+      "type": "hubspot",
+      "operation": "create_contact",
+      "data": {
+        "email": "{{email}}",
+        "firstname": "{{first_name}}",
+        "lastname": "{{last_name}}",
+        "lifecyclestage": "subscriber",
+        "lead_source": "{{source}}"
+      }
+    },
+    {
+      "id": 6,
+      "name": "Send Welcome Email",
+      "type": "sendgrid",
+      "template_id": "d-your_welcome_template_id",
+      "to": "{{email}}",
+      "data": {
+        "first_name": "{{first_name}}",
+        "lead_magnet_link": "https://yourdomain.com/download/{{lead_magnet}}?email={{email}}"
+      }
+    },
+    {
+      "id": 7,
+      "name": "Schedule Follow-up Emails",
+      "type": "make",
+      "operation": "schedule_scenario",
+      "scenario_id": "email-sequence-workflow",
+      "schedule": {
+        "email_1": "{{addHours(now, 24)}}",
+        "email_2": "{{addHours(now, 72)}}",
+        "email_3": "{{addHours(now, 168)}}"
+      },
+      "data": {
+        "email": "{{email}}",
+        "first_name": "{{first_name}}"
+      }
+    },
+    {
+      "id": 8,
+      "name": "Send Slack Notification",
+      "type": "slack",
+      "webhook": "{{SLACK_WEBHOOK_URL}}",
+      "message": "🎉 New Lead Captured!\nEmail: {{email}}\nSource: {{source}}\nLead Magnet: {{lead_magnet}}"
+    },
+    {
+      "id": 9,
+      "name": "Send Telegram Notification",
+      "type": "http",
+      "method": "POST",
+      "url": "https://api.telegram.org/bot8702462545:AAFn87DUV2vHCtpjXyQxJSYdwKqkh4fL3Zk/sendMessage",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "chat_id": "1830418033",
+        "text": "🎯 <b>NEW LEAD CAPTURED!</b>\n\nEmail: {{email}}\nSource: {{source}}\nLead Magnet: {{lead_magnet}}\nTime: {{now}}\n\n📈 Pipeline growing!",
+        "parse_mode": "HTML"
+      }
+    },
+    {
+      "id": 10,
+      "name": "Update Analytics",
+      "type": "supabase",
+      "operation": "insert",
+      "table": "analytics_events",
+      "data": {
+        "event_type": "lead_captured",
+        "email": "{{email}}",
+        "source": "{{source}}",
+        "lead_magnet": "{{lead_magnet}}",
+        "timestamp": "{{now}}"
+      }
+    }
+  ],
+  "error_handling": {
+    "retry_count": 3,
+    "retry_interval": 60,
+    "on_failure": {
+      "action": "slack_notification",
+      "message": "⚠️ Lead Capture Failed for {{email}}"
+    }
+  }
+}
